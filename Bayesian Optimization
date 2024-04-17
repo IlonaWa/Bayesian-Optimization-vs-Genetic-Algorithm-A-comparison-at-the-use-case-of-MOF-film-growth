@@ -1,0 +1,450 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "NKTiUJ3Vt-eU"
+   },
+   "source": [
+    "See https://github.com/facebook/Ax/issues/743"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/",
+     "height": 363
+    },
+    "id": "frb6kTSIpZug",
+    "outputId": "c9932e3e-5a2f-44a6-fe68-9d86c6a0e550"
+   },
+   "outputs": [],
+   "source": [
+    "# %% imports\n",
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "import csv\n",
+    "\n",
+    "from ax.modelbridge.generation_strategy import GenerationStrategy, GenerationStep\n",
+    "from ax.modelbridge.registry import Models\n",
+    "\n",
+    "from ax.service.ax_client import AxClient\n",
+    "from ax.service.utils.instantiation import ObjectiveProperties"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/"
+    },
+    "id": "IM7Dt9tuqoZk",
+    "outputId": "71e7e410-15b3-49c2-ad22-05195d33e5fe",
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[{'name': 'time_h', 'type': 'range', 'bounds': [1.0, 5.0]},\n",
+       " {'name': 'vapour_source_volume_ml', 'type': 'range', 'bounds': [1.0, 10.0]},\n",
+       " {'name': 'modulator_in_surface_drop_ul',\n",
+       "  'type': 'range',\n",
+       "  'bounds': [0.0, 26.0]},\n",
+       " {'name': 'overall_concentration_mmol_l',\n",
+       "  'type': 'range',\n",
+       "  'bounds': [1.0, 20.0]},\n",
+       " {'name': 'volume_surface_drop_ul', 'type': 'range', 'bounds': [20.0, 50.0]},\n",
+       " {'name': 'DMF_ratio', 'type': 'range', 'bounds': [0.0, 1.0]}]"
+      ]
+     },
+     "execution_count": 11,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# Ax-specific\n",
+    "parameters = [\n",
+    "    {\"name\": \"time_h\", \"type\": \"range\", \"bounds\": [1.0, 5.0]},\n",
+    "    {\"name\": \"vapour_source_volume_ml\", \"type\": \"range\", \"bounds\": [1.0, 10.0]},\n",
+    "    {\"name\": \"modulator_in_surface_drop_ul\", \"type\": \"range\", \"bounds\": [0.0, 26.0]},\n",
+    "    {\"name\": \"overall_concentration_mmol_l\", \"type\": \"range\", \"bounds\": [1.0, 20.0]},\n",
+    "    {\"name\": \"volume_surface_drop_ul\", \"type\": \"range\", \"bounds\": [20.0, 50.0]},\n",
+    "    {\"name\": \"DMF_ratio\", \"type\": \"range\", \"bounds\": [0.0, 1.0]}\n",
+    "]\n",
+    "parameters"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(      time_h  vapour_source_volume_ml  modulator_in_surface_drop_ul  \\\n",
+       " 0   4.000000                     8.00                          0.00   \n",
+       " 1   5.000000                     5.00                         20.00   \n",
+       " 2   5.000000                     6.00                         10.00   \n",
+       " 3   5.000000                    10.00                          0.00   \n",
+       " 4   4.000000                     5.00                          6.00   \n",
+       " 5   1.000000                     2.00                         16.00   \n",
+       " 6   1.000000                     5.00                         16.00   \n",
+       " 7   2.000000                     6.00                          0.00   \n",
+       " 8   2.000000                     5.00                         26.00   \n",
+       " 9   3.000000                     7.00                          6.00   \n",
+       " 10  2.616667                     5.58                         25.93   \n",
+       " 11  1.366667                     4.56                         26.00   \n",
+       " 12  2.233333                     4.17                         23.33   \n",
+       " 13  2.050000                     5.08                         25.77   \n",
+       " 14  1.866667                     6.45                         26.00   \n",
+       " 15  1.997435                     4.58                         26.00   \n",
+       " 16  2.366667                     4.30                         25.99   \n",
+       " 17  2.050000                     5.95                         26.00   \n",
+       " 18  2.233333                     3.88                         26.00   \n",
+       " 19  2.000000                     5.85                         22.20   \n",
+       " \n",
+       "     overall_concentration_mmol_l  volume_surface_drop_ul  DMF_ratio  \n",
+       " 0                             20                   30.00       0.40  \n",
+       " 1                             10                   40.00       1.00  \n",
+       " 2                             20                   50.00       0.40  \n",
+       " 3                             15                   50.00       0.80  \n",
+       " 4                              5                   40.00       0.00  \n",
+       " 5                              5                   30.00       1.00  \n",
+       " 6                             10                   50.00       0.00  \n",
+       " 7                             15                   50.00       0.00  \n",
+       " 8                             20                   30.00       0.80  \n",
+       " 9                              5                   40.00       0.80  \n",
+       " 10                            20                   30.86       0.78  \n",
+       " 11                            20                   30.00       0.82  \n",
+       " 12                            20                   27.33       0.76  \n",
+       " 13                            20                   29.77       1.00  \n",
+       " 14                            20                   30.00       0.89  \n",
+       " 15                            20                   35.38       0.77  \n",
+       " 16                            20                   29.99       0.97  \n",
+       " 17                            20                   30.00       0.62  \n",
+       " 18                            20                   30.00       0.96  \n",
+       " 19                            20                   26.20       0.82  ,\n",
+       " 0     0.34770\n",
+       " 1     0.29910\n",
+       " 2     0.39760\n",
+       " 3     0.38930\n",
+       " 4     0.00000\n",
+       " 5     0.06890\n",
+       " 6     0.11370\n",
+       " 7     0.24310\n",
+       " 8     0.70230\n",
+       " 9     0.09890\n",
+       " 10    0.10858\n",
+       " 11    0.83031\n",
+       " 12    0.92954\n",
+       " 13    0.20969\n",
+       " 14    0.57101\n",
+       " 15    0.48678\n",
+       " 16    0.43473\n",
+       " 17    0.82248\n",
+       " 18    0.34575\n",
+       " 19    0.24037\n",
+       " Name: yield, dtype: float64)"
+      ]
+     },
+     "execution_count": 12,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "def load_experiments(experiments_csv_path='C:\\\\Users\\\\Lenovo\\\\Documents\\\\PhD\\\\Byesian-Optimization\\\\AX\\\\results\\\\result_with-round0.csv'):\n",
+    "    experiments = pd.read_csv(experiments_csv_path,  sep=\";\")\n",
+    "    y_train = experiments.pop('yield')\n",
+    "    X_train = experiments\n",
+    "    return X_train, y_train, \n",
+    "    \n",
+    "X_train, y_train = load_experiments()\n",
+    "X_train, y_train"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/",
+     "height": 35
+    },
+    "id": "xK644Esppia_",
+    "outputId": "d1b7c035-dcfa-405e-a275-a7d443319390"
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['volume_surface_drop_ul - modulator_in_surface_drop_ul >= 4']"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "composition_constraint = [\"volume_surface_drop_ul - modulator_in_surface_drop_ul >= 4\"]\n",
+    "composition_constraint"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/",
+     "height": 436
+    },
+    "id": "npCeW3_9pjyG",
+    "outputId": "ce6b7f29-414f-491c-e85a-1acf94fed329",
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "[INFO 09-27 09:36:52] ax.service.ax_client: Starting optimization with verbose logging. To disable logging, set the `verbose_logging` argument to `False`. Note that float values in the logs are rounded to 6 decimal points.\n",
+      "[INFO 09-27 09:36:52] ax.service.utils.instantiation: Inferred value type of ParameterType.FLOAT for parameter time_h. If that is not the expected value type, you can explicity specify 'value_type' ('int', 'float', 'bool' or 'str') in parameter dict.\n",
+      "[INFO 09-27 09:36:52] ax.service.utils.instantiation: Inferred value type of ParameterType.FLOAT for parameter vapour_source_volume_ml. If that is not the expected value type, you can explicity specify 'value_type' ('int', 'float', 'bool' or 'str') in parameter dict.\n",
+      "[INFO 09-27 09:36:52] ax.service.utils.instantiation: Inferred value type of ParameterType.FLOAT for parameter modulator_in_surface_drop_ul. If that is not the expected value type, you can explicity specify 'value_type' ('int', 'float', 'bool' or 'str') in parameter dict.\n",
+      "[INFO 09-27 09:36:52] ax.service.utils.instantiation: Inferred value type of ParameterType.FLOAT for parameter overall_concentration_mmol_l. If that is not the expected value type, you can explicity specify 'value_type' ('int', 'float', 'bool' or 'str') in parameter dict.\n",
+      "[INFO 09-27 09:36:52] ax.service.utils.instantiation: Inferred value type of ParameterType.FLOAT for parameter volume_surface_drop_ul. If that is not the expected value type, you can explicity specify 'value_type' ('int', 'float', 'bool' or 'str') in parameter dict.\n",
+      "[INFO 09-27 09:36:52] ax.service.utils.instantiation: Inferred value type of ParameterType.FLOAT for parameter DMF_ratio. If that is not the expected value type, you can explicity specify 'value_type' ('int', 'float', 'bool' or 'str') in parameter dict.\n",
+      "[INFO 09-27 09:36:52] ax.service.utils.instantiation: Created search space: SearchSpace(parameters=[RangeParameter(name='time_h', parameter_type=FLOAT, range=[1.0, 5.0]), RangeParameter(name='vapour_source_volume_ml', parameter_type=FLOAT, range=[1.0, 10.0]), RangeParameter(name='modulator_in_surface_drop_ul', parameter_type=FLOAT, range=[0.0, 26.0]), RangeParameter(name='overall_concentration_mmol_l', parameter_type=FLOAT, range=[1.0, 20.0]), RangeParameter(name='volume_surface_drop_ul', parameter_type=FLOAT, range=[20.0, 50.0]), RangeParameter(name='DMF_ratio', parameter_type=FLOAT, range=[0.0, 1.0])], parameter_constraints=[ParameterConstraint(1.0*modulator_in_surface_drop_ul + -1.0*volume_surface_drop_ul <= -4.0)]).\n"
+     ]
+    }
+   ],
+   "source": [
+    "## skip the pseudo-random suggested points by specifying a custom generation strategy\n",
+    "gs = GenerationStrategy(\n",
+    "    steps=[\n",
+    "        # 2. Bayesian optimization step (requires data obtained from previous phase and learns\n",
+    "        # from all data available at the time of each new candidate generation call)\n",
+    "        GenerationStep(\n",
+    "            model=Models.GPEI,\n",
+    "            num_trials=-1,  # No limitation on how many trials should be produced from this step\n",
+    "            max_parallelism=10,  # Parallelism limit for this step, often lower than for Sobol\n",
+    "            # More on parallelism vs. required samples in BayesOpt:\n",
+    "            # https://ax.dev/docs/bayesopt.html#tradeoff-between-parallelism-and-total-number-of-trials\n",
+    "        ),\n",
+    "    ]\n",
+    ")\n",
+    "# setup the experiment\n",
+    "ax_client = AxClient(generation_strategy=gs)\n",
+    "ax_client.create_experiment(\n",
+    "    name=\"dummy\",\n",
+    "    parameters=parameters,\n",
+    "    parameter_constraints=composition_constraint,\n",
+    "    #minimize=True,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/",
+     "height": 364
+    },
+    "id": "EEv0dHgqpyGA",
+    "outputId": "470999b3-6a6b-40b9-be7f-37c60c42ae73"
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 4.0, 'vapour_source_volume_ml': 8.0, 'modulator_in_surface_drop_ul': 0.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.4} as trial 0.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 0 with data: {'objective': (0.3477, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 5.0, 'vapour_source_volume_ml': 5.0, 'modulator_in_surface_drop_ul': 20.0, 'overall_concentration_mmol_l': 10.0, 'volume_surface_drop_ul': 40.0, 'DMF_ratio': 1.0} as trial 1.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 1 with data: {'objective': (0.2991, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 5.0, 'vapour_source_volume_ml': 6.0, 'modulator_in_surface_drop_ul': 10.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 50.0, 'DMF_ratio': 0.4} as trial 2.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 2 with data: {'objective': (0.3976, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 5.0, 'vapour_source_volume_ml': 10.0, 'modulator_in_surface_drop_ul': 0.0, 'overall_concentration_mmol_l': 15.0, 'volume_surface_drop_ul': 50.0, 'DMF_ratio': 0.8} as trial 3.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 3 with data: {'objective': (0.3893, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 4.0, 'vapour_source_volume_ml': 5.0, 'modulator_in_surface_drop_ul': 6.0, 'overall_concentration_mmol_l': 5.0, 'volume_surface_drop_ul': 40.0, 'DMF_ratio': 0.0} as trial 4.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 4 with data: {'objective': (0.0, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 1.0, 'vapour_source_volume_ml': 2.0, 'modulator_in_surface_drop_ul': 16.0, 'overall_concentration_mmol_l': 5.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 1.0} as trial 5.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 5 with data: {'objective': (0.0689, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 1.0, 'vapour_source_volume_ml': 5.0, 'modulator_in_surface_drop_ul': 16.0, 'overall_concentration_mmol_l': 10.0, 'volume_surface_drop_ul': 50.0, 'DMF_ratio': 0.0} as trial 6.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 6 with data: {'objective': (0.1137, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.0, 'vapour_source_volume_ml': 6.0, 'modulator_in_surface_drop_ul': 0.0, 'overall_concentration_mmol_l': 15.0, 'volume_surface_drop_ul': 50.0, 'DMF_ratio': 0.0} as trial 7.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 7 with data: {'objective': (0.2431, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.0, 'vapour_source_volume_ml': 5.0, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.8} as trial 8.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 8 with data: {'objective': (0.7023, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 3.0, 'vapour_source_volume_ml': 7.0, 'modulator_in_surface_drop_ul': 6.0, 'overall_concentration_mmol_l': 5.0, 'volume_surface_drop_ul': 40.0, 'DMF_ratio': 0.8} as trial 9.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 9 with data: {'objective': (0.0989, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.616667, 'vapour_source_volume_ml': 5.58, 'modulator_in_surface_drop_ul': 25.93, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.86, 'DMF_ratio': 0.78} as trial 10.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 10 with data: {'objective': (0.10858, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 1.366667, 'vapour_source_volume_ml': 4.56, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.82} as trial 11.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 11 with data: {'objective': (0.83031, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.233333, 'vapour_source_volume_ml': 4.17, 'modulator_in_surface_drop_ul': 23.33, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 27.33, 'DMF_ratio': 0.76} as trial 12.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 12 with data: {'objective': (0.92954, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.05, 'vapour_source_volume_ml': 5.08, 'modulator_in_surface_drop_ul': 25.77, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 29.77, 'DMF_ratio': 1.0} as trial 13.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 13 with data: {'objective': (0.20969, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 1.866667, 'vapour_source_volume_ml': 6.45, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.89} as trial 14.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 14 with data: {'objective': (0.57101, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 1.997435, 'vapour_source_volume_ml': 4.58, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 35.38, 'DMF_ratio': 0.77} as trial 15.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 15 with data: {'objective': (0.48678, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.366667, 'vapour_source_volume_ml': 4.3, 'modulator_in_surface_drop_ul': 25.99, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 29.99, 'DMF_ratio': 0.97} as trial 16.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 16 with data: {'objective': (0.43473, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.05, 'vapour_source_volume_ml': 5.95, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.62} as trial 17.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 17 with data: {'objective': (0.82248, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.233333, 'vapour_source_volume_ml': 3.88, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.96} as trial 18.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 18 with data: {'objective': (0.34575, None)}.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Attached custom parameterization {'time_h': 2.0, 'vapour_source_volume_ml': 5.85, 'modulator_in_surface_drop_ul': 22.2, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 26.2, 'DMF_ratio': 0.82} as trial 19.\n",
+      "[INFO 09-27 09:36:55] ax.service.ax_client: Completed trial 19 with data: {'objective': (0.24037, None)}.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# attach the training data\n",
+    "for i in range(X_train.shape[0]):\n",
+    "    ax_client.attach_trial(X_train.iloc[i].to_dict())\n",
+    "    ax_client.complete_trial(trial_index=i, raw_data=y_train[i])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/"
+    },
+    "id": "7dSAOLfmp40m",
+    "outputId": "52f55de6-ad08-4570-b142-d91a3b27eab0"
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "[INFO 09-27 09:37:15] ax.service.ax_client: Generated new trial 20 with parameters {'time_h': 1.652597, 'vapour_source_volume_ml': 3.995424, 'modulator_in_surface_drop_ul': 24.895622, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 28.895622, 'DMF_ratio': 0.637877}.\n",
+      "[INFO 09-27 09:37:31] ax.service.ax_client: Generated new trial 21 with parameters {'time_h': 1.230814, 'vapour_source_volume_ml': 5.473761, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.661526}.\n",
+      "[INFO 09-27 09:37:47] ax.service.ax_client: Generated new trial 22 with parameters {'time_h': 1.276362, 'vapour_source_volume_ml': 5.632026, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.652784}.\n",
+      "[INFO 09-27 09:38:03] ax.service.ax_client: Generated new trial 23 with parameters {'time_h': 1.650197, 'vapour_source_volume_ml': 4.424416, 'modulator_in_surface_drop_ul': 25.759554, 'overall_concentration_mmol_l': 16.784287, 'volume_surface_drop_ul': 29.759554, 'DMF_ratio': 0.6746}.\n",
+      "[INFO 09-27 09:38:19] ax.service.ax_client: Generated new trial 24 with parameters {'time_h': 1.952551, 'vapour_source_volume_ml': 2.865364, 'modulator_in_surface_drop_ul': 23.329078, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 27.329078, 'DMF_ratio': 0.678389}.\n",
+      "[INFO 09-27 09:38:35] ax.service.ax_client: Generated new trial 25 with parameters {'time_h': 2.09305, 'vapour_source_volume_ml': 3.025986, 'modulator_in_surface_drop_ul': 23.214401, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 27.214401, 'DMF_ratio': 0.640069}.\n",
+      "[INFO 09-27 09:38:51] ax.service.ax_client: Generated new trial 26 with parameters {'time_h': 1.448514, 'vapour_source_volume_ml': 2.526309, 'modulator_in_surface_drop_ul': 25.921999, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 29.921999, 'DMF_ratio': 0.734168}.\n",
+      "[INFO 09-27 09:39:08] ax.service.ax_client: Generated new trial 27 with parameters {'time_h': 1.11288, 'vapour_source_volume_ml': 3.241097, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 30.918399, 'DMF_ratio': 0.712291}.\n",
+      "[INFO 09-27 09:39:24] ax.service.ax_client: Generated new trial 28 with parameters {'time_h': 1.330207, 'vapour_source_volume_ml': 3.681346, 'modulator_in_surface_drop_ul': 23.01231, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 27.01231, 'DMF_ratio': 0.729321}.\n",
+      "[INFO 09-27 09:39:40] ax.service.ax_client: Generated new trial 29 with parameters {'time_h': 1.877855, 'vapour_source_volume_ml': 4.98021, 'modulator_in_surface_drop_ul': 26.0, 'overall_concentration_mmol_l': 19.722206, 'volume_surface_drop_ul': 30.0, 'DMF_ratio': 0.488427}.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# produce the next 10 suggested experiments, be sure to only run this once\n",
+    "next_experiments = []\n",
+    "for i in range(10):\n",
+    "    next_experiment, trial_index = ax_client.get_next_trial()\n",
+    "    next_experiments.append(next_experiment)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/"
+    },
+    "id": "6Uh9FZFuq-mR",
+    "outputId": "736d8511-54f5-469a-d112-57be5a6cc60a"
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "C:\\Users\\Lenovo\\miniconda3\\envs\\ax_bo\\lib\\site-packages\\ax\\modelbridge\\cross_validation.py:340: RuntimeWarning: divide by zero encountered in divide\n",
+      "  return float(np.mean(1.96 * 2 * se_pred / np.abs(y_obs)))\n",
+      "C:\\Users\\Lenovo\\miniconda3\\envs\\ax_bo\\lib\\site-packages\\ax\\modelbridge\\cross_validation.py:350: RuntimeWarning: divide by zero encountered in divide\n",
+      "  return float(np.mean(np.abs((y_pred - y_obs) / y_obs)))\n",
+      "C:\\Users\\Lenovo\\miniconda3\\envs\\ax_bo\\lib\\site-packages\\ax\\modelbridge\\cross_validation.py:356: RuntimeWarning: divide by zero encountered in double_scalars\n",
+      "  return float((np.max(y_obs) - np.min(y_obs)) / np.min(y_obs))\n",
+      "[WARNING 09-27 09:41:24] ax.modelbridge.cross_validation: Metric objective was unable to be reliably fit.\n",
+      "[WARNING 09-27 09:41:24] ax.service.utils.best_point: Model fit is poor; falling back on raw data for best point.\n",
+      "[WARNING 09-27 09:41:24] ax.service.utils.best_point: Model fit is poor and data on objective metric objective is noisy; interpret best points results carefully.\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "{'time_h': 2.233333333, 'vapour_source_volume_ml': 4.17, 'modulator_in_surface_drop_ul': 23.33, 'overall_concentration_mmol_l': 20.0, 'volume_surface_drop_ul': 27.33, 'DMF_ratio': 0.76} ({'objective': 0.92954}, {'objective': {'objective': nan}})\n"
+     ]
+    }
+   ],
+   "source": [
+    "# note that the model fit is poor because of the toy data and randomly generated objective values\n",
+    "# (i.e. this is what we would expect: a bad fit, because the \"true\" values are nonsense)\n",
+    "best_parameters, metrics = ax_client.get_best_parameters()\n",
+    "print(best_parameters, metrics)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "keys = next_experiments[0].keys()\n",
+    "\n",
+    "with open('round1.csv', 'w', newline='') as output_file:\n",
+    "    dict_writer = csv.DictWriter(output_file, keys)\n",
+    "    dict_writer.writeheader()\n",
+    "    dict_writer.writerows(next_experiments)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "colab": {
+   "collapsed_sections": [],
+   "provenance": []
+  },
+  "kernelspec": {
+   "display_name": "ax_bo",
+   "language": "python",
+   "name": "ax_bo"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.8.13"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 1
+}
